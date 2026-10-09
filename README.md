@@ -22,11 +22,8 @@ The queue holds up to 32 waiting jobs, in addition to jobs being processed. A fu
 
 Word count uses whitespace-separated tokens. Character count includes spaces and counts Unicode code points, not bytes or visible grapheme clusters. Input text is omitted from responses and removed from the stored job on completion. There is no database: a restart clears jobs and results. This is a single-process portfolio demo, with a shared API key and no per-user authorization, retries, real email sending, or production durability.
 
-## 1. Open in VS Code on Windows
 
-Extract the ZIP. In VS Code select File > Open Folder and choose the inner `taskqueue` folder containing `go.mod`. Keep it separate from PayTrack. Use the Go extension already installed for PayTrack. Select Terminal > New Terminal and use PowerShell.
-
-## 2. Verify the code
+## 1. Verify the code
 
 Copy commands exactly; `./...` means the current package and subpackages.
 
@@ -53,7 +50,7 @@ go test -race ./...
 | TestShutdownDrainsJobs | Accepted work finishes; late work is rejected |
 | TestConcurrentSubmissions | Twenty concurrent requests complete |
 
-## 3. Start the backend (terminal 1)
+## 2. Start the backend (terminal 1)
 
 ```powershell
 $env:API_KEY = 'local-taskqueue-secret-123456'
@@ -62,7 +59,7 @@ go run .
 
 Server listens on port 8081, so it can run alongside PayTrack on 8080. Leave this terminal running. Waiting without returning a prompt is normal. If the port is occupied, stop the other TaskQueue instance.
 
-## 4. Health check (terminal 2)
+## 3. Health check (terminal 2)
 
 Open Terminal > New Terminal, then run:
 
@@ -72,7 +69,7 @@ Invoke-RestMethod -Uri 'http://localhost:8081/health'
 
 Expected: status `ok`.
 
-## 5. Submit a job (terminal 2)
+## 4. Submit a job (terminal 2)
 
 ```powershell
 $headers = @{ 'X-API-Key' = 'local-taskqueue-secret-123456' }
@@ -84,7 +81,7 @@ $job | Format-List
 
 Expected: generated ID, status `queued`, and a timestamp. HTTP 202 means accepted for background processing, not that processing has completed.
 
-## 6. Retrieve the result
+## 5. Retrieve the result
 
 ```powershell
 $result = Invoke-RestMethod -Uri "http://localhost:8081/jobs/$($job.id)" -Headers $headers
@@ -105,7 +102,7 @@ Expected completed result:
 
 If it is queued or processing, repeat the retrieval command. Do not submit again just to check status.
 
-## 7. Test invalid requests
+## 6. Test invalid requests
 
 Missing authentication (expected HTTP 401, shown as a PowerShell error):
 
@@ -127,68 +124,7 @@ Invoke-RestMethod -Uri 'http://localhost:8081/jobs/not-a-real-id' -Headers $head
 
 The queue-full test deliberately starts no workers to fill the channel predictably. Small manual jobs run too quickly to guarantee a full queue.
 
-## 8. Stop the backend
-
-Press Ctrl+C in terminal 1. The HTTP server stops accepting requests, workers drain accepted jobs, and the program exits. Restart with `go run .` when needed. Old job IDs then return 404 because storage is in memory.
-
-## 9. Upload to GitHub
-
-Sign in as **saisugandhe-reddy**, the account used successfully for PayTrack. Create a new empty repository named **taskqueue-go-api**. Choose Public if desired. Do not initialize a README, .gitignore, or license on GitHub.
-
-In the local taskqueue folder (not PayTrack), run:
-
-```powershell
-git init
-git config user.name "Sai Sugandh Eppa"
-git config user.email "YOUR_GITHUB_VERIFIED_OR_NOREPLY_EMAIL"
-git add .
-git status
-git commit -m "Add Go background job API with worker pool and tests"
-git branch -M main
-git remote add origin https://github.com/saisugandhe-reddy/taskqueue-go-api.git
-git push -u origin main
-```
-
-Replace the email placeholder. Use your GitHub verified email or private noreply commit email. Complete GitHub sign-in as saisugandhe-reddy if prompted. This guide does not create the remote repository for you; create it before pushing.
-
-Verify at https://github.com/saisugandhe-reddy/taskqueue-go-api. Review the README and update the testing note with real results before publishing. Never add real keys or personal input data.
-
-Later changes:
-
-```powershell
-git add .
-git commit -m "Describe your change"
-git push
-```
-
-## Optional Docker
-
-With Docker Desktop running:
-
-```powershell
-docker build -t taskqueue .
-docker run --rm -p 8081:8081 -e API_KEY=local-taskqueue-secret-123456 taskqueue
-```
-
-Stop the locally running server first to release port 8081. The Dockerfile has not been built in this generation environment. Add Docker to your resume only after building and running it.
-
-## Read the code in this order
-
-1. `Job` and `Result`: request status and output fields.
-2. `Queue`: map for history, channel for pending IDs, mutex for synchronization.
-3. `submit`: validation, job ID generation, nonblocking enqueue, HTTP 202/503.
-4. `start`: worker pool, processing state, counts, completion state.
-5. `get`: read stored status using a read lock.
-6. `stop` and `main`: signal handling, HTTP shutdown, queue draining.
-7. Tests: see each behavior checked through the HTTP handler.
-
-Interview explanation: "I built an asynchronous Go API where clients submit text jobs and poll for results. A buffered channel feeds two workers. A mutex protects shared job state, and a full queue rejects submissions rather than creating unlimited goroutines. On shutdown, workers finish accepted work. The demo uses memory; a durable queue would be the next step."
-
-## Resume entry after local verification
-
 **TaskQueue — Background Job API | Golang, REST APIs, Goroutines, Channels**
 
 - Built an asynchronous Go REST API with a two-worker pool, buffered job queue, and status polling endpoints.
 - Implemented synchronized job tracking, queue overload handling, API key authentication, and shutdown draining; added tests for concurrency and invalid requests.
-
-Do not claim a distributed queue, durable storage, real customers, throughput, race-free execution, or measured coverage unless implemented or verified. Suggested personal extension: add a SHA-256 text-digest job type with its own validation and tests.
